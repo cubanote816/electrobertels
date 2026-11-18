@@ -846,3 +846,65 @@
       /* Ajuste para pantallas muy pequeñas */
     }
   }
+  /*---------------------------------------
+     CONTACT FORM STATES (CLA-705)
+  -----------------------------------------*/
+
+  .contact-form .form-control.is-invalid {
+    border-bottom-color: #b42318;
+  }
+
+  .contact-form .cf-error {
+    color: #b42318;
+    font-size: 13px;
+    margin: -0.5rem 0 1rem;
+  }
+
+  .contact-form .cf-honeypot {
+    position: absolute;
+    left: -10000px;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+
+  .contact-form .cf-privacy {
+    color: var(--gray-color);
+    font-size: 13px;
+    margin: 1rem 0 0;
+  }
+
+  .contact-form #submit-button:disabled {
+    cursor: progress;
+    opacity: 0.7;
+  }
+
+  .contact-form .cf-status {
+    border-radius: 6px;
+    font-size: 15px;
+    margin-top: 1.5rem;
+    padding: 1rem 1.25rem;
+  }
+
+  .contact-form .cf-status:focus {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+
+  .contact-form .cf-status--success {
+    background: #ecfdf3;
+    border: 1px solid #abefc6;
+    color: #05603a;
+  }
+
+  .contact-form .cf-status--error {
+    background: #fef3f2;
+    border: 1px solid #fecdca;
+    color: #912018;
+  }
+
+  .contact-form .cf-status a {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+  }

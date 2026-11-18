@@ -341,24 +341,41 @@
       </div>
       <div class="row">
         <div class="col-lg-6 col-md-6 col-12 wow fadeIn" data-wow-delay="0.1s">
-          <form action="#" method="get" class="contact-form webform pb-1" role="form">
+          <!-- CLA-705: posts to the Electro Bertels intake (js/contact-form.js). -->
+          <form action="#" method="post" class="contact-form webform pb-1" id="contact-form" novalidate
+            data-intake-url="https://backend.claesen-verlichting.be/v1/website/consultations?site=electro-bertels">
             <div class="form-group d-flex flex-column-reverse">
-              <input type="text" class="form-control" name="cf-name" id="cf-name" placeholder="Uw naam">
+              <input type="text" class="form-control" name="name" id="cf-name" placeholder="Uw naam"
+                required maxlength="255" autocomplete="name" aria-describedby="cf-name-error">
               <label for="cf-name" class="webform-label">Volledige naam</label>
             </div>
+            <p class="cf-error" id="cf-name-error" hidden></p>
 
             <div class="form-group d-flex flex-column-reverse">
-              <input type="email" class="form-control" name="cf-email" id="cf-email" placeholder="Uw e-mailadres">
+              <input type="email" class="form-control" name="email" id="cf-email" placeholder="Uw e-mailadres"
+                required maxlength="255" autocomplete="email" aria-describedby="cf-email-error">
               <label for="cf-email" class="webform-label">Uw e-mailadres</label>
             </div>
+            <p class="cf-error" id="cf-email-error" hidden></p>
 
             <div class="form-group d-flex flex-column-reverse">
-              <textarea class="form-control" rows="5" name="cf-message" id="cf-message"
-                placeholder="Uw bericht"></textarea>
+              <textarea class="form-control" rows="5" name="message" id="cf-message" placeholder="Uw bericht"
+                required maxlength="5000" aria-describedby="cf-message-error"></textarea>
               <label for="cf-message" class="webform-label">Bericht</label>
             </div>
+            <p class="cf-error" id="cf-message-error" hidden></p>
 
-            <button type="submit" class="form-control" id="submit-button" name="submit">Verzenden</button>
+            <!-- Honeypot: humans never see or fill this field; bots that do are silently dropped. -->
+            <div class="cf-honeypot" aria-hidden="true">
+              <label for="cf-website-url">Laat dit veld leeg</label>
+              <input type="text" name="website_url" id="cf-website-url" tabindex="-1" autocomplete="off">
+            </div>
+
+            <p class="cf-privacy">Wij gebruiken uw gegevens enkel om uw vraag te beantwoorden.</p>
+
+            <button type="submit" class="form-control" id="submit-button">Verzenden</button>
+
+            <div class="cf-status" id="cf-status" role="status" aria-live="polite" tabindex="-1" hidden></div>
           </form>
         </div>
 
@@ -397,6 +414,7 @@
   <script src="lib/wow/wow.min.js"></script>
 
   <script src="js/custom.js"></script>
+  <script src="js/contact-form.js"></script>
   <script>
     new WOW().init();
   </script>
