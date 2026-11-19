@@ -1,16 +1,19 @@
 /*
  * CLA-705 — contact form → Electro Bertels intake.
  *
- * POSTs JSON to the form's data-intake-url (POST /v1/website/consultations?site=electro-bertels).
- * The backend stores the request (bertels panel → Website → Consultation requests) and e-mails
- * the visitor a localized acknowledgement with a reference number.
+ * POSTs JSON to the form's data-intake-url: the same-origin /intake/consultations. nginx on
+ * this site forwards only that POST, through the tunnel, to the backoffice's
+ * /v1/website/consultations?site=electro-bertels (the site is pinned by nginx, never by the
+ * browser). The backend stores the request (bertels panel → Website → Consultation requests)
+ * and e-mails the visitor a localized acknowledgement with a reference number.
  *
  * Behaviour:
  * - native validation (required / maxlength / email) before any request;
  * - one Idempotency-Key per submission, kept on a network failure so a retry of a request
  *   that did arrive is not stored twice, renewed after a success;
  * - submit disabled while sending (no double submit);
- * - 422 → errors next to each field, 429 → wait message, anything else → call/mail fallback;
+ * - 422 → errors next to each field, 429 → wait message, anything else (503 included: the
+ *   backend refuses when the Bertels site is not active) → call/mail fallback;
  * - status announced through an aria-live region.
  *
  * Local development: on localhost/127.0.0.1 only, `?intake=<url>` overrides the endpoint

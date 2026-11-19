@@ -341,9 +341,9 @@
       </div>
       <div class="row">
         <div class="col-lg-6 col-md-6 col-12 wow fadeIn" data-wow-delay="0.1s">
-          <!-- CLA-705: posts to the Electro Bertels intake (js/contact-form.js). -->
+          <!-- CLA-705: posts to the same-origin intake; nginx on this site forwards it to the backoffice (js/contact-form.js). -->
           <form action="#" method="post" class="contact-form webform pb-1" id="contact-form" novalidate
-            data-intake-url="https://backend.claesen-verlichting.be/v1/website/consultations?site=electro-bertels">
+            data-intake-url="/intake/consultations">
             <div class="form-group d-flex flex-column-reverse">
               <input type="text" class="form-control" name="name" id="cf-name" placeholder="Uw naam"
                 required maxlength="255" autocomplete="name" aria-describedby="cf-name-error">
