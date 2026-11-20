@@ -53,6 +53,8 @@
 
   var TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=ebTurnstileReady';
   var TOKEN_WAIT_MS = 10000;
+  // Cloudflare invalidates a token after 300 s; never send one close to that.
+  var TOKEN_MAX_AGE_MS = 290000;
 
   var fields = ['name', 'email', 'message'];
   var status = document.getElementById('cf-status');
@@ -87,6 +89,7 @@
     })(),
     widgetId: null,
     token: null,
+    tokenAt: 0,
     failed: false,
     waiters: []
   };
@@ -99,6 +102,7 @@
 
   function setTurnstileToken(token) {
     turnstile.token = token;
+    turnstile.tokenAt = Date.now();
     turnstile.failed = false;
     wakeTurnstileWaiters();
   }
@@ -142,10 +146,21 @@
     document.head.appendChild(script);
   }
 
-  // Resolves once a token exists, the widget failed, or the wait runs out.
+  // The current token, or null when there is none or it is too old to send.
+  function freshTurnstileToken() {
+    if (turnstile.token && Date.now() - turnstile.tokenAt < TOKEN_MAX_AGE_MS) {
+      return turnstile.token;
+    }
+    return null;
+  }
+
+  // Resolves once a fresh token exists, the widget failed, or the wait runs out.
   function waitForTurnstileToken() {
+    if (turnstile.token && !freshTurnstileToken()) {
+      resetTurnstile();
+    }
     return new Promise(function (resolve) {
-      if (!turnstile.sitekey || turnstile.token || turnstile.failed) {
+      if (!turnstile.sitekey || freshTurnstileToken() || turnstile.failed) {
         resolve();
         return;
       }
@@ -167,6 +182,9 @@
   function resetTurnstile() {
     turnstile.token = null;
     if (turnstile.widgetId !== null && window.turnstile) {
+      // The widget runs again: a previous failure must not short-circuit the
+      // next wait. (Without a widget, e.g. the script never loaded, it stays failed.)
+      turnstile.failed = false;
       try {
         window.turnstile.reset(turnstile.widgetId);
       } catch (e) {
@@ -302,14 +320,15 @@
     setSending(true);
 
     waitForTurnstileToken().then(function () {
-      if (turnstile.sitekey && !turnstile.token) {
+      var token = freshTurnstileToken();
+      if (turnstile.sitekey && !token) {
         setSending(false);
         showStatus('error', TEXT.challenge, true);
         resetTurnstile();
         return null;
       }
       if (turnstile.sitekey) {
-        payload.turnstile_token = turnstile.token;
+        payload.turnstile_token = token;
       }
       return send(payload);
     });
