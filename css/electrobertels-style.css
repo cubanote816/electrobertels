@@ -908,3 +908,12 @@
     font-weight: 600;
     text-decoration: underline;
   }
+
+  /* CLA-731: Cloudflare Turnstile slot (empty unless a challenge is shown) */
+  .contact-form .cf-turnstile-slot {
+    margin-top: 1rem;
+  }
+
+  .contact-form .cf-turnstile-slot:empty {
+    margin-top: 0;
+  }
