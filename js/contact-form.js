@@ -18,6 +18,13 @@
  *
  * Local development: on localhost/127.0.0.1 only, `?intake=<url>` overrides the endpoint
  * (never on a public host, so a crafted link cannot redirect visitor data elsewhere).
+ *
+ * CLA-731 — Cloudflare Turnstile: when the form carries `data-turnstile-sitekey`, the
+ * Turnstile script is loaded (never otherwise) and a managed widget is rendered that only
+ * shows itself when a visitor must interact. The submit waits for its token, sends it as
+ * `turnstile_token`, and resets the widget after every attempt (tokens are single use).
+ * If the widget cannot load or verify, the visitor gets the phone/e-mail fallback.
+ * On localhost only, `?turnstile=<sitekey>` overrides the key for testing.
  */
 (function () {
   'use strict';
@@ -39,8 +46,15 @@
     invalid: 'Controleer de gemarkeerde velden.',
     tooMany: 'U heeft te veel berichten na elkaar verstuurd. Probeer het over een minuut opnieuw.',
     failed: 'Uw bericht kon niet worden verzonden. Probeer het later opnieuw, of neem rechtstreeks ' +
-      'contact met ons op: '
+      'contact met ons op: ',
+    challenge: 'We konden niet bevestigen dat u geen robot bent. Probeer het opnieuw, of neem ' +
+      'rechtstreeks contact met ons op: '
   };
+
+  var TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=ebTurnstileReady';
+  var TOKEN_WAIT_MS = 10000;
+  // Cloudflare invalidates a token after 300 s; never send one close to that.
+  var TOKEN_MAX_AGE_MS = 290000;
 
   var fields = ['name', 'email', 'message'];
   var status = document.getElementById('cf-status');
@@ -49,8 +63,7 @@
 
   function intakeUrl() {
     var url = form.getAttribute('data-intake-url');
-    var host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
+    if (isLocalHost()) {
       var override = new URLSearchParams(window.location.search).get('intake');
       if (override) {
         url = override;
@@ -58,6 +71,129 @@
     }
     return url;
   }
+
+  function isLocalHost() {
+    var host = window.location.hostname;
+    return host === 'localhost' || host === '127.0.0.1';
+  }
+
+  // ---------------------------------------------------------------- Turnstile (CLA-731)
+
+  var turnstile = {
+    sitekey: (function () {
+      var key = form.getAttribute('data-turnstile-sitekey') || '';
+      if (isLocalHost()) {
+        key = new URLSearchParams(window.location.search).get('turnstile') || key;
+      }
+      return key.trim();
+    })(),
+    widgetId: null,
+    token: null,
+    tokenAt: 0,
+    failed: false,
+    waiters: []
+  };
+
+  function wakeTurnstileWaiters() {
+    turnstile.waiters.splice(0).forEach(function (resolve) {
+      resolve();
+    });
+  }
+
+  function setTurnstileToken(token) {
+    turnstile.token = token;
+    turnstile.tokenAt = Date.now();
+    turnstile.failed = false;
+    wakeTurnstileWaiters();
+  }
+
+  function failTurnstile() {
+    turnstile.token = null;
+    turnstile.failed = true;
+    wakeTurnstileWaiters();
+  }
+
+  function loadTurnstile() {
+    if (!turnstile.sitekey) {
+      return;
+    }
+    var note = document.getElementById('cf-privacy-turnstile');
+    if (note) {
+      note.hidden = false;
+    }
+    window.ebTurnstileReady = function () {
+      try {
+        turnstile.widgetId = window.turnstile.render('#cf-turnstile', {
+          sitekey: turnstile.sitekey,
+          action: 'contact',
+          language: (document.documentElement.lang || 'nl').slice(0, 2),
+          appearance: 'interaction-only',
+          callback: setTurnstileToken,
+          'expired-callback': function () {
+            turnstile.token = null;
+          },
+          'error-callback': failTurnstile
+        });
+      } catch (e) {
+        failTurnstile();
+      }
+    };
+    var script = document.createElement('script');
+    script.src = TURNSTILE_SCRIPT;
+    script.async = true;
+    script.defer = true;
+    script.onerror = failTurnstile;
+    document.head.appendChild(script);
+  }
+
+  // The current token, or null when there is none or it is too old to send.
+  function freshTurnstileToken() {
+    if (turnstile.token && Date.now() - turnstile.tokenAt < TOKEN_MAX_AGE_MS) {
+      return turnstile.token;
+    }
+    return null;
+  }
+
+  // Resolves once a fresh token exists, the widget failed, or the wait runs out.
+  function waitForTurnstileToken() {
+    if (turnstile.token && !freshTurnstileToken()) {
+      resetTurnstile();
+    }
+    return new Promise(function (resolve) {
+      if (!turnstile.sitekey || freshTurnstileToken() || turnstile.failed) {
+        resolve();
+        return;
+      }
+      var done = false;
+      var timer = setTimeout(function () {
+        done = true;
+        resolve();
+      }, TOKEN_WAIT_MS);
+      turnstile.waiters.push(function () {
+        if (!done) {
+          done = true;
+          clearTimeout(timer);
+          resolve();
+        }
+      });
+    });
+  }
+
+  function resetTurnstile() {
+    turnstile.token = null;
+    if (turnstile.widgetId !== null && window.turnstile) {
+      // The widget runs again: a previous failure must not short-circuit the
+      // next wait. (Without a widget, e.g. the script never loaded, it stays failed.)
+      turnstile.failed = false;
+      try {
+        window.turnstile.reset(turnstile.widgetId);
+      } catch (e) {
+        // A reset that fails leaves no token: the next submit waits or falls back.
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- submission
 
   function newKey() {
     if (window.crypto && typeof window.crypto.randomUUID === 'function') {
@@ -183,7 +319,23 @@
 
     setSending(true);
 
-    fetch(intakeUrl(), {
+    waitForTurnstileToken().then(function () {
+      var token = freshTurnstileToken();
+      if (turnstile.sitekey && !token) {
+        setSending(false);
+        showStatus('error', TEXT.challenge, true);
+        resetTurnstile();
+        return null;
+      }
+      if (turnstile.sitekey) {
+        payload.turnstile_token = token;
+      }
+      return send(payload);
+    });
+  });
+
+  function send(payload) {
+    return fetch(intakeUrl(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -206,6 +358,8 @@
           form.reset();
           showStatus('success', TEXT.success, false);
           status.focus();
+        } else if (result.status === 422 && result.body.errors && result.body.errors.turnstile_token) {
+          showStatus('error', TEXT.challenge, true);
         } else if (result.status === 422) {
           var firstInvalid = applyServerErrors(result.body.errors);
           showStatus('error', TEXT.invalid, false);
@@ -223,7 +377,11 @@
         showStatus('error', TEXT.failed, true);
       })
       .then(function () {
+        // The token was spent (or may have been): always start from a fresh one.
+        resetTurnstile();
         setSending(false);
       });
-  });
+  }
+
+  loadTurnstile();
 })();
